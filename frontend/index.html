@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MantleQuant — AI Signal Dashboard</title>
+
+  <!-- Chart.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <!-- ethers v6 (browser bundle) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.1/ethers.umd.min.js"></script>
+
+  <style>
+    :root {
+      --bg:      #0d1117;
+      --surface: #161b22;
+      --border:  #30363d;
+      --text:    #e6edf3;
+      --muted:   #8b949e;
+      --green:   #3fb950;
+      --red:     #f85149;
+      --blue:    #388bfd;
+      --yellow:  #d29922;
+      --mantle:  #00d4aa;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, "Segoe UI", sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+    }
+
+    /* ── Header ────────────────────────────────── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--mantle);
+    }
+
+    .logo span { font-weight: 400; color: var(--text); }
+
+    .chain-badge {
+      background: rgba(0, 212, 170, 0.1);
+      border: 1px solid var(--mantle);
+      color: var(--mantle);
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+
+    /* ── Layout ────────────────────────────────── */
+    main { padding: 24px; max-width: 1200px; margin: 0 auto; }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    /* ── Cards ─────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+    }
+
+    .card h2 {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .stat-value {
+      font-size: 32px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .stat-sub {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .green { color: var(--green); }
+    .red   { color: var(--red);   }
+    .blue  { color: var(--blue);  }
+    .mantle { color: var(--mantle); }
+
+    /* ── Table ─────────────────────────────────── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    thead th {
+      text-align: left;
+      padding: 8px 12px;
+      color: var(--muted);
+      font-weight: 500;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--border);
+    }
+
+    tbody tr {
+      border-bottom: 1px solid rgba(48, 54, 61, 0.5);
+      transition: background 0.1s;
+    }
+
+    tbody tr:hover { background: rgba(255,255,255,0.03); }
+
+    td {
+      padding: 10px 12px;
+      vertical-align: middle;
+    }
+
+    /* ── Direction Badges ──────────────────────── */
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+    }
+
+    .badge-long  { background: rgba(63,185,80,0.15); color: var(--green); }
+    .badge-short { background: rgba(248,81,73,0.15); color: var(--red);   }
+    .badge-neutral { background: rgba(139,148,158,0.15); color: var(--muted); }
+    .badge-resolved { background: rgba(56,139,253,0.15); color: var(--blue); }
+
+    /* ── Confidence Bar ────────────────────────── */
+    .conf-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .conf-track {
+      width: 80px;
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .conf-fill {
+      height: 100%;
+      background: var(--mantle);
+      border-radius: 2px;
+      transition: width 0.3s;
+    }
+
+    /* ── Return Badge ──────────────────────────── */
+    .return-pos { color: var(--green); }
+    .return-neg { color: var(--red);   }
+
+    /* ── Explorer Link ─────────────────────────── */
+    .tx-link {
+      color: var(--blue);
+      text-decoration: none;
+      font-family: monospace;
+      font-size: 12px;
+    }
+    .tx-link:hover { text-decoration: underline; }
+
+    /* ── Config Panel ──────────────────────────── */
+    .config-panel {
+      background: var(--surface);
+      border: 1px solid var(--yellow);
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-bottom: 24px;
+    }
+
+    .config-panel h3 {
+      color: var(--yellow);
+      margin-bottom: 12px;
+      font-size: 14px;
+    }
+
+    .config-row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .config-row label {
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .config-row input {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 12px;
+      width: 380px;
+    }
+
+    .config-row input:focus {
+      outline: none;
+      border-color: var(--mantle);
+    }
+
+    .btn {
+      background: var(--mantle);
+      color: #000;
+      border: none;
+      padding: 7px 16px;
+      border-radius: 6px;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn:disabled { opacity: 0.4; cursor: default; }
+
+    /* ── Loading / Error ──────────────────────── */
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: var(--muted);
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 20px; height: 20px;
+      border: 2px solid var(--border);
+      border-top-color: var(--mantle);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .empty { color: var(--muted); font-style: italic; padding: 20px 12px; }
+
+    /* ── Footer ──────────────────────────────── */
+    footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: 12px;
+      padding: 24px;
+      border-top: 1px solid var(--border);
+      margin-top: 24px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────────────── -->
+<header>
+  <div class="logo">
+    ◈ MantleQuant <span>Signal Dashboard</span>
+  </div>
+  <div class="header-right">
+    <span class="chain-badge">Mantle Network</span>
+    <div class="status-dot" id="statusDot" title="Connecting..."></div>
+    <span id="statusText" style="color:var(--muted);font-size:12px;">Connecting...</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- ── Config Panel ────────────────────────────────────────────────────── -->
+  <div class="config-panel" id="configPanel">
+    <h3>⚙ Contract Configuration</h3>
+    <div class="config-row">
+      <label>SignalRegistry address:</label>
+      <input id="contractAddr"
+             placeholder="0x..."
+             value="0x0000000000000000000000000000000000000000" />
+      <button class="btn" onclick="loadContract()">Load</button>
+      <label style="margin-left:8px;">RPC:</label>
+      <input id="rpcUrl"
+             value="https://rpc.sepolia.mantle.xyz"
+             style="width:240px;" />
+    </div>
+    <div style="margin-top:8px;color:var(--muted);font-size:11px;">
+      After deploying, paste your SignalRegistry address above and click Load.
+      Alternatively, run <code style="color:var(--mantle)">npm run demo</code> in the terminal to see live signals without a deployed contract.
+    </div>
+  </div>
+
+  <!-- ── Stats Row ───────────────────────────────────────────────────────── -->
+  <div class="grid-3">
+    <div class="card">
+      <h2>Total Signals</h2>
+      <div class="stat-value mantle" id="statTotal">—</div>
+      <div class="stat-sub">on Mantle chain</div>
+    </div>
+    <div class="card">
+      <h2>Accuracy</h2>
+      <div class="stat-value green" id="statAccuracy">—</div>
+      <div class="stat-sub" id="statAccuracySub">resolved signals</div>
+    </div>
+    <div class="card">
+      <h2>Total Return</h2>
+      <div class="stat-value" id="statReturn">—</div>
+      <div class="stat-sub">cumulative basis pts</div>
+    </div>
+  </div>
+
+  <!-- ── Charts Row ──────────────────────────────────────────────────────── -->
+  <div class="grid-2">
+    <div class="card" style="height:280px;">
+      <h2>Signal Direction Distribution</h2>
+      <canvas id="directionChart" style="max-height:220px;"></canvas>
+    </div>
+    <div class="card" style="height:280px;">
+      <h2>Confidence Distribution</h2>
+      <canvas id="confidenceChart" style="max-height:220px;"></canvas>
+    </div>
+  </div>
+
+  <!-- ── Recent Signals Table ────────────────────────────────────────────── -->
+  <div class="card">
+    <h2 style="margin-bottom:16px;">Recent Signals</h2>
+    <div id="tableContainer">
+      <div class="loading">
+        <span class="spinner"></span> Waiting for contract address...
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  MantleQuant — Verifiable AI Trading on Mantle Network &nbsp;·&nbsp;
+  <a href="https://explorer.sepolia.mantle.xyz" target="_blank" style="color:var(--mantle);">Mantle Explorer</a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/YOUR_USERNAME/mantle-quant" target="_blank" style="color:var(--mantle);">GitHub</a>
+</footer>
+
+<script>
+// ─── Config ──────────────────────────────────────────────────────────────────
+
+const SIGNAL_REGISTRY_ABI = [
+  "function signalCount() view returns (uint256)",
+  "function signals(uint256) view returns (uint256 id, address agent, string asset, uint8 direction, uint16 confidence, uint128 entryPrice, uint32 horizon, uint48 timestamp, bytes32 analysisHash, uint128 exitPrice, bool resolved, int64 returnBps)",
+  "function getSignals(uint256 from, uint256 count) view returns (tuple(uint256 id, address agent, string asset, uint8 direction, uint16 confidence, uint128 entryPrice, uint32 horizon, uint48 timestamp, bytes32 analysisHash, uint128 exitPrice, bool resolved, int64 returnBps)[])",
+  "function getAgentStats(address) view returns (uint256 total, uint256 resolved, uint256 correct, int256 totalReturnBps, uint256 accuracyBps)",
+];
+
+const DIRECTION = ["NEUTRAL", "LONG", "SHORT"];
+const EXPLORER  = "https://explorer.sepolia.mantle.xyz";
+
+let provider = null;
+let registry = null;
+let dirChart = null;
+let confChart = null;
+let refreshInterval = null;
+
+// ─── Bootstrap ───────────────────────────────────────────────────────────────
+
+async function loadContract() {
+  const addr   = document.getElementById("contractAddr").value.trim();
+  const rpcUrl = document.getElementById("rpcUrl").value.trim();
+
+  if (!ethers.isAddress(addr)) {
+    alert("Invalid contract address");
+    return;
+  }
+
+  setStatus("Connecting...", "yellow");
+
+  try {
+    provider = new ethers.JsonRpcProvider(rpcUrl);
+    await provider.getNetwork();
+    registry = new ethers.Contract(addr, SIGNAL_REGISTRY_ABI, provider);
+
+    // Quick smoke test
+    await registry.signalCount();
+
+    setStatus("Connected", "green");
+    document.getElementById("configPanel").style.borderColor = "var(--border)";
+
+    // Stop previous interval if any
+    if (refreshInterval) clearInterval(refreshInterval);
+
+    await refresh();
+    refreshInterval = setInterval(refresh, 30_000); // refresh every 30s
+  } catch (err) {
+    setStatus("Connection failed", "red");
+    console.error(err);
+    document.getElementById("tableContainer").innerHTML =
+      `<div class="loading" style="color:var(--red);">Error: ${err.message}</div>`;
+  }
+}
+
+// ─── Main Refresh ─────────────────────────────────────────────────────────────
+
+async function refresh() {
+  if (!registry) return;
+  try {
+    const count = Number(await registry.signalCount());
+
+    if (count === 0) {
+      document.getElementById("statTotal").textContent = "0";
+      document.getElementById("tableContainer").innerHTML =
+        '<div class="empty">No signals recorded yet. Start the agent with <code>npm run agent</code>.</div>';
+      return;
+    }
+
+    // Fetch last 50 signals
+    const from = Math.max(0, count - 50);
+    const sigs  = await registry.getSignals(from, count - from);
+
+    updateStats(sigs, count);
+    updateCharts(sigs);
+    updateTable(sigs);
+
+  } catch (err) {
+    console.error("Refresh error:", err);
+  }
+}
+
+// ─── Stats ────────────────────────────────────────────────────────────────────
+
+function updateStats(sigs, total) {
+  document.getElementById("statTotal").textContent = total.toString();
+
+  const resolved = sigs.filter(s => s.resolved);
+  const correct  = resolved.filter(s => Number(s.returnBps) > 0).length;
+  const accuracy = resolved.length > 0 ? (correct / resolved.length * 100).toFixed(1) : "—";
+  const totalRet = resolved.reduce((acc, s) => acc + Number(s.returnBps), 0);
+
+  const accEl = document.getElementById("statAccuracy");
+  accEl.textContent = resolved.length > 0 ? `${accuracy}%` : "—";
+  accEl.className   = "stat-value " + (parseFloat(accuracy) >= 50 ? "green" : "red");
+
+  document.getElementById("statAccuracySub").textContent =
+    `${resolved.length} resolved of ${total}`;
+
+  const retEl = document.getElementById("statReturn");
+  retEl.textContent = resolved.length > 0 ? `${(totalRet / 100).toFixed(2)}%` : "—";
+  retEl.className   = "stat-value " + (totalRet >= 0 ? "green" : "red");
+}
+
+// ─── Charts ───────────────────────────────────────────────────────────────────
+
+function updateCharts(sigs) {
+  // Direction Distribution
+  const dirs  = [0, 0, 0]; // NEUTRAL, LONG, SHORT
+  for (const s of sigs) dirs[Number(s.direction)]++;
+
+  const ctxDir = document.getElementById("directionChart").getContext("2d");
+  if (dirChart) dirChart.destroy();
+  dirChart = new Chart(ctxDir, {
+    type: "doughnut",
+    data: {
+      labels: ["Neutral", "Long", "Short"],
+      datasets: [{
+        data: dirs,
+        backgroundColor: ["rgba(139,148,158,0.5)", "rgba(63,185,80,0.7)", "rgba(248,81,73,0.7)"],
+        borderColor:     ["#8b949e", "#3fb950", "#f85149"],
+        borderWidth: 1,
+      }],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { labels: { color: "#e6edf3" } },
+      },
+    },
+  });
+
+  // Confidence Histogram (buckets of 100)
+  const buckets = Array(10).fill(0);
+  for (const s of sigs) buckets[Math.min(Math.floor(Number(s.confidence) / 100), 9)]++;
+  const labels = ["0–10%","10–20%","20–30%","30–40%","40–50%","50–60%","60–70%","70–80%","80–90%","90–100%"];
+
+  const ctxConf = document.getElementById("confidenceChart").getContext("2d");
+  if (confChart) confChart.destroy();
+  confChart = new Chart(ctxConf, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [{
+        label: "Signals",
+        data: buckets,
+        backgroundColor: "rgba(0,212,170,0.4)",
+        borderColor: "#00d4aa",
+        borderWidth: 1,
+      }],
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: "#8b949e" }, grid: { color: "#30363d" } },
+        y: { ticks: { color: "#8b949e" }, grid: { color: "#30363d" }, beginAtZero: true },
+      },
+    },
+  });
+}
+
+// ─── Table ────────────────────────────────────────────────────────────────────
+
+function updateTable(sigs) {
+  const reversed = [...sigs].reverse();
+
+  const rows = reversed.map(s => {
+    const dir    = DIRECTION[Number(s.direction)] ?? "?";
+    const conf   = Number(s.confidence);
+    const confPct = (conf / 10).toFixed(1);
+    const price  = (Number(s.entryPrice) / 1e8).toLocaleString("en-US", { maximumFractionDigits: 4 });
+    const ts     = new Date(Number(s.timestamp) * 1000).toLocaleString();
+    const hash   = s.analysisHash.slice(0, 10) + "...";
+
+    const dirBadge =
+      dir === "LONG"    ? `<span class="badge badge-long">LONG</span>` :
+      dir === "SHORT"   ? `<span class="badge badge-short">SHORT</span>` :
+                          `<span class="badge badge-neutral">NEUTRAL</span>`;
+
+    const resolvedBadge = s.resolved
+      ? `<span class="badge badge-resolved">RESOLVED</span>`
+      : `<span class="badge badge-neutral">PENDING</span>`;
+
+    const ret = s.resolved
+      ? `<span class="${Number(s.returnBps) >= 0 ? "return-pos" : "return-neg"}">${(Number(s.returnBps)/100).toFixed(2)}%</span>`
+      : `<span style="color:var(--muted)">—</span>`;
+
+    return `<tr>
+      <td style="font-family:monospace;color:var(--muted)">#${Number(s.id)}</td>
+      <td><strong>${s.asset}</strong></td>
+      <td>${dirBadge}</td>
+      <td>
+        <div class="conf-bar">
+          <div class="conf-track"><div class="conf-fill" style="width:${confPct}%"></div></div>
+          <span>${confPct}%</span>
+        </div>
+      </td>
+      <td style="font-family:monospace">$${price}</td>
+      <td>${ret}</td>
+      <td>${resolvedBadge}</td>
+      <td style="color:var(--muted);font-size:12px">${ts}</td>
+      <td><span style="font-family:monospace;color:var(--muted);font-size:11px;" title="${s.analysisHash}">${hash}</span></td>
+    </tr>`;
+  }).join("");
+
+  document.getElementById("tableContainer").innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Asset</th>
+          <th>Direction</th>
+          <th>Confidence</th>
+          <th>Entry Price</th>
+          <th>Return</th>
+          <th>Status</th>
+          <th>Time</th>
+          <th>Analysis Hash</th>
+        </tr>
+      </thead>
+      <tbody>${rows || '<tr><td colspan="9" class="empty">No signals</td></tr>'}</tbody>
+    </table>`;
+}
+
+// ─── Status ───────────────────────────────────────────────────────────────────
+
+function setStatus(text, color) {
+  document.getElementById("statusText").textContent = text;
+  document.getElementById("statusDot").style.background =
+    color === "green"  ? "var(--green)"  :
+    color === "red"    ? "var(--red)"    :
+    color === "yellow" ? "var(--yellow)" : "var(--muted)";
+}
+
+// ─── Auto-load if address in query string ─────────────────────────────────────
+const params  = new URLSearchParams(window.location.search);
+const addrParam = params.get("contract");
+if (addrParam && ethers.isAddress(addrParam)) {
+  document.getElementById("contractAddr").value = addrParam;
+  window.addEventListener("load", loadContract);
+}
+</script>
+</body>
+</html>

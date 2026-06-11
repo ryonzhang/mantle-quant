@@ -1,0 +1,37 @@
+{
+  "name": "mantle-quant",
+  "version": "1.0.0",
+  "description": "Verifiable AI trading signals on Mantle Network — autonomous quant agent with on-chain performance benchmarking",
+  "private": true,
+  "scripts": {
+    "compile":          "hardhat compile",
+    "test:contracts":   "cross-env TS_NODE_PROJECT=tsconfig.hardhat.json hardhat test",
+    "deploy:testnet":   "cross-env TS_NODE_PROJECT=tsconfig.hardhat.json hardhat run scripts/deploy.ts --network mantleTestnet",
+    "deploy:mainnet":   "cross-env TS_NODE_PROJECT=tsconfig.hardhat.json hardhat run scripts/deploy.ts --network mantleMainnet",
+    "verify:testnet":   "cross-env TS_NODE_PROJECT=tsconfig.hardhat.json hardhat verify --network mantleTestnet",
+    "demo":             "tsx src/cli.ts demo",
+    "analyze":          "tsx src/cli.ts analyze",
+    "agent":            "tsx src/cli.ts run",
+    "typecheck":        "tsc --noEmit",
+    "clean":            "hardhat clean && rimraf dist"
+  },
+  "dependencies": {
+    "chalk":     "^5.3.0",
+    "commander": "^12.1.0",
+    "dotenv":    "^16.4.5",
+    "ethers":    "^6.13.4",
+    "ora":       "^8.1.1"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@types/node":                      "^22.10.0",
+    "hardhat":                          "^2.22.15",
+    "cross-env":                        "^7.0.3",
+    "rimraf":                           "^6.0.1",
+    "tsx":                              "^4.19.2",
+    "typescript":                       "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
