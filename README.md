@@ -153,6 +153,17 @@ cd mantle-quant
 npm install
 ```
 
+### Deployed Contracts (Mantle Sepolia Testnet)
+
+| Contract | Address |
+|----------|---------|
+| SignalRegistry | [`0x4E099F820985158C1732ad0d4b98EEcBc83D9feb`](https://explorer.sepolia.mantle.xyz/address/0x4E099F820985158C1732ad0d4b98EEcBc83D9feb) |
+| AgentNFT | [`0x7d8c78ABb9FDbb76aCEbeB753455CC7c12FA93F4`](https://explorer.sepolia.mantle.xyz/address/0x7d8c78ABb9FDbb76aCEbeB753455CC7c12FA93F4) |
+
+Both contracts verified on [Sourcify](https://repo.sourcify.dev/contracts/full_match/5003/0x4E099F820985158C1732ad0d4b98EEcBc83D9feb/).
+
+---
+
 ### 2. Demo (no wallet needed)
 
 ```bash

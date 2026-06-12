@@ -64,6 +64,11 @@ const config: HardhatUserConfig = {
     ],
   },
 
+  // ── Sourcify (no API key needed) ──────────────────────────────────
+  sourcify: {
+    enabled: true,
+  },
+
   // ── Gas Reporter ───────────────────────────────────────────────────
   gasReporter: {
     enabled:  process.env.REPORT_GAS !== undefined,
