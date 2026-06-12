@@ -28,43 +28,23 @@ After the horizon expires, the contract resolves the signal with the actual exit
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         MantleQuant Agent                        │
-│                                                                   │
-│  ┌───────────────┐    ┌───────────────┐    ┌─────────────────┐  │
-│  │  Bybit API    │    │  Indicators   │    │  Signal Engine  │  │
-│  │  (price data) │───▶│  SMA/RSI/ATR  │───▶│  Multi-factor   │  │
-│  └───────────────┘    └───────────────┘    │  scoring        │  │
-│                                             └────────┬────────┘  │
-│                                                      │            │
-│                                             AnalysisResult        │
-│                                             + keccak256 hash      │
-└─────────────────────────────────────────────────────┼────────────┘
-                                                       │ ethers.js
-                                                       ▼
-                                          ┌────────────────────────┐
-                                          │    Mantle Network      │
-                                          │                        │
-                                          │  ┌──────────────────┐  │
-                                          │  │ SignalRegistry   │  │
-                                          │  │ .recordSignal()  │  │
-                                          │  │ .resolveSignal() │  │
-                                          │  │ .getAgentStats() │  │
-                                          │  └──────────────────┘  │
-                                          │                        │
-                                          │  ┌──────────────────┐  │
-                                          │  │   AgentNFT       │  │
-                                          │  │  (ERC-8004 ID)   │  │
-                                          │  └──────────────────┘  │
-                                          └────────────────────────┘
-                                                       │
-                                                       ▼
-                                          ┌────────────────────────┐
-                                          │   Frontend Dashboard   │
-                                          │   (reads from chain)   │
-                                          │   Chart.js + ethers    │
-                                          └────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph Agent["MantleQuant Agent (TypeScript)"]
+        A[Bybit API\nprice data] -->|klines + ticker| B[Indicators\nSMA · RSI · ATR]
+        B --> C[Signal Engine\nmulti-factor scoring]
+        C -->|AnalysisResult + keccak256 hash| D{Direction?}
+    end
+
+    D -->|LONG / SHORT| E[ethers.js v6]
+    D -->|NEUTRAL| F([skip — no tx])
+
+    subgraph Chain["Mantle Network"]
+        E --> G["SignalRegistry.sol\nrecordSignal · resolveSignal · getAgentStats"]
+        E --> H["AgentNFT.sol\nERC-8004 soulbound identity"]
+    end
+
+    G -->|public RPC — no backend| I["Frontend Dashboard\nChart.js · ethers.js"]
 ```
 
 ---
