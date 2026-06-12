@@ -29,22 +29,26 @@ After the horizon expires, the contract resolves the signal with the actual exit
 ## Architecture
 
 ```mermaid
-flowchart TD
-    subgraph Agent["MantleQuant Agent (TypeScript)"]
-        A[Bybit API\nprice data] -->|klines + ticker| B[Indicators\nSMA · RSI · ATR]
-        B --> C[Signal Engine\nmulti-factor scoring]
-        C -->|AnalysisResult + keccak256 hash| D{Direction?}
+flowchart LR
+    subgraph Agent["  MantleQuant Agent  "]
+        direction LR
+        A([Bybit API]) -->|klines · ticker| B[SMA · RSI · ATR]
+        B --> C[Signal Engine]
     end
 
-    D -->|LONG / SHORT| E[ethers.js v6]
-    D -->|NEUTRAL| F([skip — no tx])
+    C -->|NEUTRAL| N([skip])
+    C -->|LONG / SHORT\n+ keccak256 hash| E[[ethers.js v6]]
 
-    subgraph Chain["Mantle Network"]
-        E --> G["SignalRegistry.sol\nrecordSignal · resolveSignal · getAgentStats"]
-        E --> H["AgentNFT.sol\nERC-8004 soulbound identity"]
+    subgraph Chain["  Mantle Sepolia  "]
+        direction TB
+        G[SignalRegistry.sol\nrecordSignal\nresolveSignal\ngetAgentStats]
+        H[AgentNFT.sol\nERC-8004 soulbound]
     end
 
-    G -->|public RPC — no backend| I["Frontend Dashboard\nChart.js · ethers.js"]
+    E --> G
+    E --> H
+
+    G -->|public RPC| I([Frontend Dashboard])
 ```
 
 ---
