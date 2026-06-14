@@ -2,17 +2,15 @@
 
 export type Direction = "LONG" | "SHORT" | "NEUTRAL" | "ABSTAIN";
 
-/** Raw market quote from Bybit */
 export interface Quote {
-  asset:           string;
-  symbol:          string;
-  price:           number;
-  priceChange24h:  number;   // percent
-  volume24h:       number;
-  openInterest?:   number;
+  asset:          string;
+  symbol:         string;
+  price:          number;
+  priceChange24h: number;
+  volume24h:      number;
+  openInterest?:  number;
 }
 
-/** OHLCV candle */
 export interface OHLCV {
   time:   number;
   open:   number;
@@ -22,7 +20,6 @@ export interface OHLCV {
   volume: number;
 }
 
-/** Technical indicator bundle */
 export interface Indicators {
   sma20:      number;
   sma50:      number;
@@ -33,40 +30,49 @@ export interface Indicators {
   oversold:   boolean;
 }
 
-/** Multi-factor scoring breakdown */
 export interface SignalFactors {
-  trendScore:      number;   // -1 to +1
-  momentumScore:   number;   // -1 to +1
-  volatilityAdj:   number;   // 0 to -1 (penalty)
-  priceChangeScore: number;  // -1 to +1
-  compositeScore:  number;   // combined
+  trendScore:       number;
+  momentumScore:    number;
+  volatilityAdj:    number;
+  priceChangeScore: number;
+  compositeScore:   number;
 }
 
-/** Final analysis result from the AI engine */
 export interface AnalysisResult {
-  asset:        string;
-  direction:    Direction;
-  confidence:   number;          // 0–1000 (0.0 %–100.0 %)
-  entryPrice:   number;
-  horizon:      number;          // minutes
-  reasoning:    string;
-  factors:      SignalFactors;
-  timestamp:    number;          // unix ms
-  // Calibrated sizing (Kelly criterion)
-  calibratedProb?: number;       // P(up) 0–1, calibrated from confidence
-  kellyFraction?:  number;       // fractional Kelly (quarter-Kelly, 0–1)
-  positionSize?:   number;       // recommended size as fraction of portfolio (0–0.10)
-  // LLM enrichment (optional)
-  narrative?:      string;
-  keyDrivers?:     string[];
-  riskFactors?:    string[];
-  priceTarget?:    number | null;
-  stopLoss?:       number | null;
-  marketRegime?:   string;
-  llmEnriched?:    boolean;
+  asset:          string;
+  symbol:         string;
+  direction:      Direction;
+  confidence:     number;
+  entryPrice:     number;
+  horizon:        number;
+  reasoning:      string;
+  factors:        SignalFactors;
+  compositeScore: number;
+  calibratedProb: number;
+  positionSize:   number;
+  analysisHash:   string;
+  analysisJson:   string;
+  // optional LLM enrichment
+  narrative?:     string;
+  keyDrivers?:    string[];
+  riskFactors?:   string[];
+  priceTarget?:   number | null;
+  stopLoss?:      number | null;
+  marketRegime?:  string;
+  llmEnriched?:   boolean;
 }
 
-/** A signal that has been committed to Mantle chain */
 export interface OnChainSignal {
   txHash:   string;
-  signalId: nu
+  signalId: number;
+  asset:    string;
+  direction: Direction;
+}
+
+export interface ChainConfig {
+  rpcUrl:                 string;
+  privateKey:             string;
+  signalRegistryAddress:  string;
+  agentNFTAddress:        string;
+  intervalMs:             number;
+}

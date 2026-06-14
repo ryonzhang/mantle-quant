@@ -5,6 +5,7 @@
  * Commands:
  *   analyze [symbol]   — run analysis in dry-run mode (no chain writes)
  *   demo               — demo mode: analyze all assets, pretty-print results
+ *   backtest [symbol]  — walk-forward backtest with Brier score
  *   run                — start the live agent daemon (requires .env)
  */
 
@@ -13,7 +14,7 @@ import chalk          from "chalk";
 import { config }     from "dotenv";
 import { ASSETS, analyzeAll, analyzeAsset } from "./agent/analyzer.js";
 import { runDaemon }  from "./agent/daemon.js";
-import { runBacktest, runAllBacktests, formatBacktestSummary } from "./backtest/runner.js";
+import { runBacktest, runAllBacktests } from "./backtest/runner.js";
 import type { ChainConfig } from "./types.js";
 
 config(); // load .env
@@ -49,7 +50,7 @@ function printAnalysis(results: Awaited<ReturnType<typeof analyzeAll>>) {
 program
   .name("mantle-quant")
   .description("MantleQuant — Verifiable AI Trading Signals on Mantle Network")
-  .version("1.0.0");
+  .version("3.0.0");
 
 // ── analyze ──────────────────────────────────────────────────────────────────
 program
@@ -123,5 +124,67 @@ program
 
       for (const r of results) {
         const brierColor = r.brierScore < 0.22 ? chalk.green : r.brierScore < 0.25 ? chalk.yellow : chalk.red;
+        const edgeLabel  = r.brierScore < 0.25 ? chalk.green("✓ beats coin-flip baseline") : chalk.red("✗ no edge over coin-flip");
+
         console.log(chalk.bold(`  ${r.symbol.replace("USDT", "")}`));
-        cons
+        console.log(`    Brier Score : ${brierColor(r.brierScore.toFixed(4))}  ${edgeLabel}  ${chalk.gray("(baseline = 0.2500)")}`);
+        console.log(`    Accuracy    : ${chalk.yellow((r.accuracy * 100).toFixed(1) + "%")}  on directional signals`);
+        console.log(`    Signals     : ${r.periods} total  |  ${r.active} directional  |  ${r.abstained} abstained  |  ${r.neutrals} neutral`);
+        console.log(`    Edge        : ${chalk.cyan((r.edge * 100).toFixed(2) + "%")}  avg calibrated edge per trade`);
+        console.log();
+      }
+
+      // Summary
+      const avgBrier = results.reduce((s, r) => s + r.brierScore, 0) / results.length;
+      const avgAcc   = results.reduce((s, r) => s + r.accuracy,   0) / results.length;
+      const bColor   = avgBrier < 0.25 ? chalk.green : chalk.red;
+
+      console.log("  " + "─".repeat(55));
+      console.log(chalk.bold("  SUMMARY"));
+      console.log(`    Avg Brier Score : ${bColor(avgBrier.toFixed(4))}  ${avgBrier < 0.25 ? chalk.green("✓ edge confirmed") : chalk.red("✗ no edge")}`);
+      console.log(`    Avg Accuracy    : ${chalk.yellow((avgAcc * 100).toFixed(1) + "%")}`);
+      console.log(chalk.gray("\n  Walk-forward methodology: 200 bars, WINDOW=52, strictly out-of-sample.\n"));
+
+    } catch (err) {
+      console.error(chalk.red("Backtest error:"), err);
+      process.exit(1);
+    }
+  });
+
+// ── run (live agent daemon) ───────────────────────────────────────────────────
+program
+  .command("run")
+  .description("Start the live agent daemon — writes signals to Mantle chain every hour")
+  .action(async () => {
+    const registryAddr = process.env.SIGNAL_REGISTRY_ADDRESS;
+    const nftAddr      = process.env.AGENT_NFT_ADDRESS;
+    const privateKey   = process.env.PRIVATE_KEY;
+    const rpcUrl       = process.env.MANTLE_TESTNET_RPC ?? "https://rpc.sepolia.mantle.xyz";
+
+    if (!registryAddr || !nftAddr || !privateKey) {
+      console.error(chalk.red("\nMissing required .env variables:"));
+      if (!privateKey)   console.error(chalk.red("  PRIVATE_KEY"));
+      if (!registryAddr) console.error(chalk.red("  SIGNAL_REGISTRY_ADDRESS"));
+      if (!nftAddr)      console.error(chalk.red("  AGENT_NFT_ADDRESS"));
+      console.error(chalk.gray("\nCopy .env.example to .env and fill in the values.\n"));
+      process.exit(1);
+    }
+
+    const chain: ChainConfig = {
+      rpcUrl,
+      privateKey,
+      signalRegistryAddress: registryAddr,
+      agentNFTAddress:       nftAddr,
+      intervalMs:            Number(process.env.INTERVAL_MS ?? 3_600_000),
+    };
+
+    console.log(chalk.bold.green("\nMantleQuant Live Agent\n"));
+    console.log(chalk.gray(`  Network  : ${rpcUrl}`));
+    console.log(chalk.gray(`  Registry : ${registryAddr}`));
+    console.log(chalk.gray(`  NFT      : ${nftAddr}`));
+    console.log(chalk.gray(`  Interval : ${chain.intervalMs / 60_000} min\n`));
+
+    await runDaemon(chain);
+  });
+
+program.parse();
