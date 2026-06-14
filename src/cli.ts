@@ -13,6 +13,7 @@ import chalk          from "chalk";
 import { config }     from "dotenv";
 import { ASSETS, analyzeAll, analyzeAsset } from "./agent/analyzer.js";
 import { runDaemon }  from "./agent/daemon.js";
+import { runBacktest, runAllBacktests, formatBacktestSummary } from "./backtest/runner.js";
 import type { ChainConfig } from "./types.js";
 
 config(); // load .env
@@ -105,34 +106,22 @@ program
     }
   });
 
-// ── run ──────────────────────────────────────────────────────────────────────
+// ── backtest ─────────────────────────────────────────────────────────────────
 program
-  .command("run")
-  .description("Start the live agent daemon (writes signals to Mantle chain)")
-  .action(async () => {
-    const privateKey      = process.env["PRIVATE_KEY"];
-    const signalRegistry  = process.env["SIGNAL_REGISTRY_ADDRESS"];
-    const rpcUrl          = process.env["MANTLE_RPC_URL"] ?? "https://rpc.sepolia.mantle.xyz";
+  .command("backtest [symbol]")
+  .description("Run walk-forward backtest with Brier score (default: all assets)")
+  .action(async (symbol?: string) => {
+    console.log(chalk.bold.blue("\nMantleQuant Walk-Forward Backtest\n"));
+    console.log(chalk.gray("  Fetching ~200 hourly candles from Bybit..."));
+    console.log(chalk.gray("  Running out-of-sample signal evaluation..."));
+    console.log(chalk.gray("  Computing Brier score + directional accuracy...\n"));
 
-    if (!privateKey) {
-      console.error(chalk.red("ERROR: PRIVATE_KEY not set in .env"));
-      console.error(chalk.gray("  Copy .env.example → .env and fill in your values"));
-      process.exit(1);
-    }
-    if (!signalRegistry) {
-      console.error(chalk.red("ERROR: SIGNAL_REGISTRY_ADDRESS not set in .env"));
-      console.error(chalk.gray("  Deploy first: npm run deploy:testnet"));
-      process.exit(1);
-    }
+    try {
+      const results = symbol
+        ? [await runBacktest(symbol.toUpperCase().endsWith("USDT") ? symbol.toUpperCase() : `${symbol.toUpperCase()}USDT`)]
+        : await runAllBacktests();
 
-    const chainConfig: ChainConfig = {
-      rpcUrl,
-      privateKey,
-      signalRegistry,
-      agentNFT: process.env["AGENT_NFT_ADDRESS"],
-    };
-
-    await runDaemon(chainConfig);
-  });
-
-program.parse();
+      for (const r of results) {
+        const brierColor = r.brierScore < 0.22 ? chalk.green : r.brierScore < 0.25 ? chalk.yellow : chalk.red;
+        console.log(chalk.bold(`  ${r.symbol.replace("USDT", "")}`));
+        cons

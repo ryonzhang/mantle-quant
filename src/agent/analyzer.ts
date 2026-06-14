@@ -17,6 +17,7 @@
 import { createHash }       from "crypto";
 import { fetchBybitTicker } from "../tools/prices.js";
 import { computeIndicators } from "../tools/indicators.js";
+import { enrichSignal }      from "../llm/prompts.js";
 import type { AnalysisResult, Direction, SignalFactors } from "../types.js";
 
 // ─── Covered assets ──────────────────────────────────────────────────────────
@@ -66,76 +67,53 @@ export async function analyzeAsset(symbol: string): Promise<AnalysisResult> {
   const compositeScore = rawScore * (1 + volatilityAdj);
 
   // ── Direction + Confidence ───────────────────────────────────────────
-  // Dead-band of ±0.25 → NEUTRAL
-  const THRESHOLD = 0.25;
+  // ABSTAIN when signal is too weak or volatility is extreme.
+  // NEUTRAL for mid-range signals. LONG/SHORT for directional calls.
+  const ABSTAIN_THRESHOLD = 0.12;
+  const NEUTRAL_THRESHOLD = 0.25;
+  const absScore  = Math.abs(compositeScore);
+  const highVol   = volatilityAdj < -0.35;
+
   let direction: Direction;
   let rawConfidence: number;
 
-  if (compositeScore > THRESHOLD) {
+  if (absScore < ABSTAIN_THRESHOLD || (highVol && absScore < 0.20)) {
+    direction    = "ABSTAIN";   // no trade — signal too weak or too noisy
+    rawConfidence = 0;
+  } else if (compositeScore > NEUTRAL_THRESHOLD) {
     direction    = "LONG";
     rawConfidence = compositeScore / 2.0; // normalise to 0–1
-  } else if (compositeScore < -THRESHOLD) {
+  } else if (compositeScore < -NEUTRAL_THRESHOLD) {
     direction    = "SHORT";
     rawConfidence = -compositeScore / 2.0;
   } else {
     direction    = "NEUTRAL";
-    rawConfidence = 1.0 - Math.abs(compositeScore) / THRESHOLD;
+    rawConfidence = 1.0 - absScore / NEUTRAL_THRESHOLD;
   }
 
   // Map to 0–1000 integer scale, cap at 950 (never 100 % confident)
   const confidence = Math.min(Math.round(rawConfidence * 1000), 950);
 
+  // ── Calibrated probability P(up) ─────────────────────────────────────
+  // Maps direction + confidence to a 0–1 probability estimate.
+  // LONG → 0.50–0.95; SHORT → 0.05–0.50; otherwise 0.50
+  const calibratedProb =
+    direction === "LONG"  ? 0.5 + (confidence / 1000) * 0.45 :
+    direction === "SHORT" ? 0.5 - (confidence / 1000) * 0.45 :
+    0.5;
+
+  // ── Kelly sizing ──────────────────────────────────────────────────────
+  // Quarter-Kelly position sizing based on calibrated edge.
+  // edge = 2 × |P(up) - 0.5|; at 1:1 odds, full Kelly = edge.
+  // Quarter-Kelly halves expected drawdown vs half-Kelly.
+  const kellyEdge    = Math.abs(calibratedProb - 0.5) * 2;
+  const kellyFraction = kellyEdge * 0.25;               // quarter-Kelly
+  const positionSize  = (direction === "ABSTAIN" || direction === "NEUTRAL")
+    ? 0
+    : Math.min(kellyFraction, 0.10);                     // cap at 10% per trade
+
   // ── Reasoning Text ───────────────────────────────────────────────────
   const reasoning = [
     `trend=${indicators.trend}(sma20=${indicators.sma20.toFixed(2)},sma50=${indicators.sma50.toFixed(2)})`,
     `rsi14=${indicators.rsi14.toFixed(1)}${indicators.overbought ? "[OB]" : indicators.oversold ? "[OS]" : ""}`,
-    `atr14=${indicators.atr14.toFixed(4)}(${(atrPct * 100).toFixed(2)}%)`,
-    `24hΔ=${quote.priceChange24h.toFixed(2)}%`,
-    `composite=${compositeScore.toFixed(3)}→${direction}@${(confidence / 10).toFixed(1)}%`,
-  ].join(" ");
-
-  const factors: SignalFactors = {
-    trendScore,
-    momentumScore,
-    volatilityAdj,
-    priceChangeScore,
-    compositeScore,
-  };
-
-  return {
-    asset,
-    direction,
-    confidence,
-    entryPrice: quote.price,
-    horizon:    DEFAULT_HORIZON,
-    reasoning,
-    factors,
-    timestamp:  Date.now(),
-  };
-}
-
-/** Run analysis on all covered assets in parallel */
-export async function analyzeAll(): Promise<AnalysisResult[]> {
-  return Promise.all(ASSETS.map(({ symbol }) => analyzeAsset(symbol)));
-}
-
-// ─── Hashing ─────────────────────────────────────────────────────────────────
-
-/**
- * Produce a deterministic bytes32-compatible hash of an analysis result.
- * This hash is stored on-chain alongside the signal, allowing anyone to
- * verify the off-chain analysis JSON matches what was committed.
- */
-export function hashAnalysis(analysis: AnalysisResult): `0x${string}` {
-  const payload = JSON.stringify({
-    asset:       analysis.asset,
-    direction:   analysis.direction,
-    confidence:  analysis.confidence,
-    entryPrice:  analysis.entryPrice,
-    horizon:     analysis.horizon,
-    reasoning:   analysis.reasoning,
-    factors:     analysis.factors,
-    timestamp:   analysis.timestamp,
-  });
-  return `0x${createHash("sha256").update(payload).digest("hex")}`;
-}
+    `atr14=${indicators.atr14.toFixed(4)}(${(atrPct * 100).toFixed(2)}%

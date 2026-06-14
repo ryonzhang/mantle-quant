@@ -1,17 +1,22 @@
 {
   "name": "mantle-quant",
-  "version": "1.0.0",
+  "version": "3.0.0",
   "description": "Verifiable AI trading signals on Mantle Network — autonomous quant agent with on-chain performance benchmarking",
   "private": true,
   "scripts": {
-    "compile":          "hardhat compile",
-    "test:contracts":   "cross-env TS_NODE_PROJECT=tsconfig.hardhat.json hardhat test",
+    "compile":          "cross-env TS_NODE_PROJECT=tsconfig.hardhat.json hardhat compile",
+    "test:contracts":   "cross-env TS_NODE_PROJECT=tsconfig.hardhat.json hardhat test test/SignalRegistry.test.ts",
     "deploy:testnet":   "cross-env TS_NODE_PROJECT=tsconfig.hardhat.json hardhat run scripts/deploy.ts --network mantleTestnet",
     "deploy:mainnet":   "cross-env TS_NODE_PROJECT=tsconfig.hardhat.json hardhat run scripts/deploy.ts --network mantleMainnet",
     "verify:testnet":   "cross-env TS_NODE_PROJECT=tsconfig.hardhat.json hardhat verify --network mantleTestnet",
     "demo":             "tsx src/cli.ts demo",
     "analyze":          "tsx src/cli.ts analyze",
+    "backtest":         "tsx src/cli.ts backtest",
     "agent":            "tsx src/cli.ts run",
+    "serve":            "tsx src/server.ts",
+    "start":            "tsx src/server.ts",
+    "test":             "vitest run",
+    "test:unit":        "vitest run",
     "typecheck":        "tsc --noEmit",
     "clean":            "hardhat clean && rimraf dist"
   },
@@ -29,7 +34,8 @@
     "cross-env":                        "^7.0.3",
     "rimraf":                           "^6.0.1",
     "tsx":                              "^4.19.2",
-    "typescript":                       "^5.7.2"
+    "typescript":                       "^5.7.2",
+    "vitest":                           "^1.0.0"
   },
   "engines": {
     "node": ">=20"

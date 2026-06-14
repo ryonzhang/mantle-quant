@@ -1,6 +1,6 @@
 // ─── Signal & Analysis Types ──────────────────────────────────────────────────
 
-export type Direction = "LONG" | "SHORT" | "NEUTRAL";
+export type Direction = "LONG" | "SHORT" | "NEUTRAL" | "ABSTAIN";
 
 /** Raw market quote from Bybit */
 export interface Quote {
@@ -44,28 +44,29 @@ export interface SignalFactors {
 
 /** Final analysis result from the AI engine */
 export interface AnalysisResult {
-  asset:       string;
-  direction:   Direction;
-  confidence:  number;          // 0–1000 (0.0 %–100.0 %)
-  entryPrice:  number;
-  horizon:     number;          // minutes
-  reasoning:   string;
-  factors:     SignalFactors;
-  timestamp:   number;          // unix ms
+  asset:        string;
+  direction:    Direction;
+  confidence:   number;          // 0–1000 (0.0 %–100.0 %)
+  entryPrice:   number;
+  horizon:      number;          // minutes
+  reasoning:    string;
+  factors:      SignalFactors;
+  timestamp:    number;          // unix ms
+  // Calibrated sizing (Kelly criterion)
+  calibratedProb?: number;       // P(up) 0–1, calibrated from confidence
+  kellyFraction?:  number;       // fractional Kelly (quarter-Kelly, 0–1)
+  positionSize?:   number;       // recommended size as fraction of portfolio (0–0.10)
+  // LLM enrichment (optional)
+  narrative?:      string;
+  keyDrivers?:     string[];
+  riskFactors?:    string[];
+  priceTarget?:    number | null;
+  stopLoss?:       number | null;
+  marketRegime?:   string;
+  llmEnriched?:    boolean;
 }
 
 /** A signal that has been committed to Mantle chain */
 export interface OnChainSignal {
   txHash:   string;
-  signalId: number;
-  analysis: AnalysisResult;
-  blockNumber?: number;
-}
-
-/** Config for the on-chain writer */
-export interface ChainConfig {
-  rpcUrl:          string;
-  privateKey:      string;
-  signalRegistry:  string;   // contract address
-  agentNFT?:       string;   // optional, for registration
-}
+  signalId: nu

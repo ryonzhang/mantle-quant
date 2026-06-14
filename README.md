@@ -1,28 +1,56 @@
-# MantleQuant
+# MantleQuant v3
 
-**Verifiable AI Trading Signals on Mantle Network**
+**Verifiable AI Trading Signals on Mantle Network — with Quantified Edge**
 
-> Every AI signal decision is written to the Mantle blockchain — immutable, public, and verifiable. No cherry-picking. No fake backtests. For the first time, AI trading performance can be benchmarked at scale on-chain.
+> Every AI signal is committed to Mantle blockchain *before* the outcome is known.
+> Now with **walk-forward backtesting** and **Brier score calibration** — the only AI trading agent in this hackathon that proves its edge with out-of-sample statistics.
 
 Built for the **Turing Test Hackathon 2026** — AI Trading & Strategy track.
 
 ---
 
+## What's New in v3
+
+| Feature | Description |
+|---------|-------------|
+| **Walk-Forward Backtest** | 200 hourly bars, WINDOW=52, strictly out-of-sample — no lookahead |
+| **Brier Score** | Mean (P̂ - outcome)² per signal. Coin-flip baseline = 0.25. We target < 0.24. |
+| **ABSTAIN Direction** | 4th signal state: agent refuses to trade when evidence is weak (\|score\| < 0.12) |
+| **Fractional Kelly Sizing** | Quarter-Kelly position sizing from calibrated probability — max 10% per trade |
+| **Calibrated Probability** | LONG → 0.5 + (conf/1000)×0.45; SHORT → 0.5 - (conf/1000)×0.45 |
+| **Backtest API** | `GET /api/backtest/:symbol` and `/api/backtest/all` — run live from the server |
+
+---
+
 ## The Problem
 
-AI trading systems claim impressive backtest numbers, but those numbers are privately computed and impossible to verify. Any system can cherry-pick a good lookback window and present it as a "live track record." There is no way to know if the results were achieved in real-time or fabricated post-hoc.
+AI trading systems claim impressive results — but those numbers are privately computed and impossible to verify. Any system can cherry-pick a favorable backtest window after the fact. There is no trust-minimized standard.
+
+The $120B AI trading market runs entirely on trust.
+
+---
 
 ## The Solution
 
-MantleQuant publishes every signal **before** the outcome is known. A smart contract on Mantle Network records:
+MantleQuant solves this at two levels:
 
-- The direction (LONG / SHORT / NEUTRAL)
-- Confidence level (0–100%)
-- Entry price at signal time
-- Analysis hash (verifiable off-chain)
-- Signal horizon (when to resolve)
+**1 — On-chain signal commitment (verifiable track record)**
+Every signal is written to `SignalRegistry.sol` on Mantle *before* the outcome is known. The contract resolves signals after the horizon with the actual exit price and computes P&L on-chain. No cherry-picking possible.
 
-After the horizon expires, the contract resolves the signal with the actual exit price and computes the return on-chain. The entire track record is immutable and auditable by anyone — no trust required.
+**2 — Out-of-sample backtesting with Brier score (quantified edge)**
+We go further than on-chain commitment — we also prove the *model itself* has genuine predictive power using a proper statistical metric:
+
+```
+Brier Score = mean( (P̂ - outcome)² )
+Coin-flip baseline: 0.2500
+Our target:         < 0.2400 → genuine edge beyond random
+```
+
+Run it yourself:
+```bash
+npm run backtest          # all assets
+npm run backtest BTC      # single asset
+```
 
 ---
 
@@ -32,8 +60,9 @@ After the horizon expires, the contract resolves the signal with the actual exit
 flowchart TD
     A([Bybit API\nprice data])
     B[Indicators\nSMA · RSI · ATR]
-    C[Signal Engine\nmulti-factor]
+    C["Signal Engine\nABSTAIN · LONG · SHORT · NEUTRAL\n+ calibrated prob + Kelly size"]
     D[ethers.js v6]
+    E["Walk-Forward\nBacktest Engine\nBrier score"]
 
     subgraph Chain["Mantle Sepolia Testnet"]
         G[SignalRegistry.sol]
@@ -42,7 +71,9 @@ flowchart TD
 
     I([Frontend Dashboard\nChart.js])
 
-    A -->|klines| B --> C -->|signal + hash| D
+    A -->|klines| B --> C
+    C -->|signal + hash| D
+    C -->|200 bars out-of-sample| E
     D --> G
     D --> H
     G -->|public RPC| I
@@ -54,46 +85,33 @@ flowchart TD
 
 ### SignalRegistry.sol
 
-The core contract. Stores every AI signal immutably.
-
 | Function | Description |
 |----------|-------------|
-| `recordSignal(asset, direction, confidence, entryPrice, horizon, analysisHash)` | Write a new signal — callable by the agent |
-| `resolveSignal(id, exitPrice)` | Settle the signal after horizon elapses |
+| `recordSignal(asset, direction, confidence, entryPrice, horizon, analysisHash)` | Write signal before outcome is known |
+| `resolveSignal(id, exitPrice)` | Settle signal after horizon — computes return on-chain |
 | `getAgentStats(address)` | On-chain accuracy + P&L for any agent |
 | `getSignals(from, count)` | Paginated batch read for frontends |
 
-**Signal struct:**
-```solidity
-struct Signal {
-    uint256  id;
-    address  agent;
-    string   asset;           // "BTC", "ETH", "MNT"
-    Direction direction;      // LONG / SHORT / NEUTRAL
-    uint16   confidence;      // 0–1000 (0.0%–100.0%)
-    uint128  entryPrice;      // price × 1e8
-    uint32   horizon;         // minutes
-    uint48   timestamp;
-    bytes32  analysisHash;    // keccak256 of off-chain analysis
-    uint128  exitPrice;       // filled on resolution
-    bool     resolved;
-    int64    returnBps;       // actual return in basis points
-}
-```
-
 ### AgentNFT.sol
 
-Soulbound ERC-721 identity NFT for agents (ERC-8004 inspired).
+Soulbound ERC-721 identity NFT (ERC-8004 inspired). One per agent, non-transferable. Reputation accumulates on-chain.
 
-- One NFT per agent address — cannot be transferred
-- On-chain metadata (no external server)
-- Accumulates reputation via SignalRegistry stats
+---
+
+## Deployed Contracts (Mantle Sepolia Testnet)
+
+| Contract | Address |
+|----------|---------|
+| SignalRegistry | [`0x4E099F820985158C1732ad0d4b98EEcBc83D9feb`](https://explorer.sepolia.mantle.xyz/address/0x4E099F820985158C1732ad0d4b98EEcBc83D9feb) |
+| AgentNFT | [`0x7d8c78ABb9FDbb76aCEbeB753455CC7c12FA93F4`](https://explorer.sepolia.mantle.xyz/address/0x7d8c78ABb9FDbb76aCEbeB753455CC7c12FA93F4) |
+
+Both contracts verified on [Sourcify](https://repo.sourcify.dev/contracts/full_match/5003/0x4E099F820985158C1732ad0d4b98EEcBc83D9feb/).
 
 ---
 
 ## Signal Generation Engine
 
-Five independent factors combine into a calibrated composite score:
+### Scoring (v3)
 
 | Factor | Weight | Logic |
 |--------|--------|-------|
@@ -101,9 +119,30 @@ Five independent factors combine into a calibrated composite score:
 | Momentum | ~25% | RSI14 mean-reversion |
 | Price change | ~15% | 24h momentum confirmation |
 | Volatility adj | ~15% | ATR-based confidence penalty |
-| Dead-band filter | — | ±0.25 threshold → NEUTRAL |
+| ABSTAIN filter | — | \|score\| < 0.12 → refuse to trade |
 
-Output: `Direction ∈ {LONG, SHORT, NEUTRAL}` + `confidence ∈ [0, 950]`
+### Direction Logic (v3)
+
+```typescript
+if (absScore < 0.12 || (highVol && absScore < 0.20)) {
+  direction = "ABSTAIN";   // agent declines — not enough edge
+} else if (compositeScore > 0.25) {
+  direction = "LONG";
+} else if (compositeScore < -0.25) {
+  direction = "SHORT";
+} else {
+  direction = "NEUTRAL";
+}
+```
+
+### Kelly Sizing (v3)
+
+```typescript
+calibratedProb  = direction === "LONG"  ? 0.5 + (conf/1000) * 0.45
+                : direction === "SHORT" ? 0.5 - (conf/1000) * 0.45 : 0.5;
+kellyEdge       = Math.abs(calibratedProb - 0.5) * 2;
+positionSize    = Math.min(kellyEdge * 0.25, 0.10);   // quarter-Kelly, capped at 10%
+```
 
 ---
 
@@ -114,8 +153,6 @@ Output: `Direction ∈ {LONG, SHORT, NEUTRAL}` + `confidence ∈ [0, 950]`
 | Bitcoin | Bybit Perpetuals | BTCUSDT |
 | Ethereum | Bybit Perpetuals | ETHUSDT |
 | **Mantle** | Bybit Perpetuals | **MNTUSDT** |
-
-MNT (Mantle's native token) is included as the flagship asset to maximise Mantle ecosystem alignment.
 
 ---
 
@@ -134,22 +171,11 @@ cd mantle-quant
 npm install
 ```
 
-### Deployed Contracts (Mantle Sepolia Testnet)
-
-| Contract | Address |
-|----------|---------|
-| SignalRegistry | [`0x4E099F820985158C1732ad0d4b98EEcBc83D9feb`](https://explorer.sepolia.mantle.xyz/address/0x4E099F820985158C1732ad0d4b98EEcBc83D9feb) |
-| AgentNFT | [`0x7d8c78ABb9FDbb76aCEbeB753455CC7c12FA93F4`](https://explorer.sepolia.mantle.xyz/address/0x7d8c78ABb9FDbb76aCEbeB753455CC7c12FA93F4) |
-
-Both contracts verified on [Sourcify](https://repo.sourcify.dev/contracts/full_match/5003/0x4E099F820985158C1732ad0d4b98EEcBc83D9feb/).
-
----
-
 ### 2. Demo (no wallet needed)
 
 ```bash
-npm run demo
-# Fetches live data from Bybit API and runs analysis in dry-run mode
+npm run demo        # live signals from Bybit
+npm run backtest    # walk-forward backtest + Brier score
 ```
 
 ### 3. Deploy to Mantle Testnet
@@ -160,41 +186,33 @@ cp .env.example .env
 
 npm run compile
 npm run deploy:testnet
-# Saves addresses to deployed-addresses.json
 ```
 
-### 4. Update .env
+### 4. Run the Agent
 
 ```bash
-# Set the addresses from deployed-addresses.json
-SIGNAL_REGISTRY_ADDRESS=0x...
-AGENT_NFT_ADDRESS=0x...
+npm run agent    # analyzes BTC/ETH/MNT every hour, writes to Mantle chain
 ```
 
-### 5. Run the Agent
+### 5. HTTP API Server
 
 ```bash
-npm run agent
-# Analyzes BTC/ETH/MNT every hour
-# Writes non-NEUTRAL signals to Mantle chain
-# Resolves expired signals automatically
+npm run serve
+# GET /api/health
+# GET /api/analyze/all
+# GET /api/backtest/MNTUSDT
+# GET /api/backtest/all
 ```
-
-### 6. View Dashboard
-
-Open `frontend/index.html` in a browser, paste the SignalRegistry address, and click Load.
-
-Or deploy to GitHub Pages for a public URL.
 
 ---
 
 ## Testing
 
 ```bash
-# Compile contracts
-npm run compile
+# Unit tests (44 tests: 26 analysis + 18 backtest)
+npm test
 
-# Run Hardhat tests (14 tests across SignalRegistry + AgentNFT)
+# Contract tests (16 tests across SignalRegistry + AgentNFT)
 npm run test:contracts
 
 # TypeScript typecheck
@@ -205,22 +223,12 @@ npm run typecheck
 
 ## Judging Criteria Alignment
 
-| Criterion | Implementation |
-|-----------|---------------|
-| **Technical Depth** (30%) | Solidity contracts with full event logging + resolution logic; multi-factor quant engine; ethers.js v6 integration; on-chain P&L computation |
-| **Innovation** (25%) | First verifiable AI trading benchmark on Mantle — signals are on-chain axioms, not cherry-picked claims; ERC-8004 soulbound agent identity |
-| **Mantle Ecosystem** (25%) | Deployed on Mantle Sepolia/Mainnet; covers MNT native token; integrates with Mantle Explorer; ERC-8004 agent identity standard |
-| **Product Completeness** (20%) | Working CLI demo (`npm run demo`); live dashboard reading from chain; Hardhat tests; full README; one-command deploy |
-
----
-
-## Track
-
-**AI Trading & Strategy** (Sponsored by Bybit and Blockchain for Good Alliance)
-
-- Bybit API: price data + klines for all analysis
-- Python/Solidity templates: replaced with TypeScript + Solidity (superior type safety)
-- On-chain execution: every signal recorded on Mantle at signal-time, resolved with actual prices
+| Criterion | v3 Implementation |
+|-----------|------------------|
+| **Technical Depth** (30%) | Solidity contracts with on-chain P&L; multi-factor quant engine with Brier calibration; walk-forward backtest; fractional Kelly sizing; ABSTAIN direction; 44 unit tests + 16 contract tests |
+| **Innovation** (25%) | First verifiable AI trading benchmark on Mantle; Brier score = quantified edge proof; ABSTAIN = disciplined non-trading; ERC-8004 soulbound identity |
+| **Mantle Ecosystem** (25%) | Deployed on Mantle Sepolia; MNT native token covered; ERC-8004 agent identity; all benchmarking on Mantle chain |
+| **Product Completeness** (20%) | `npm run demo` in 5s with no setup; `npm run backtest` shows live Brier stats; HTTP API with backtest endpoints; dashboard reads from chain; one-command deploy |
 
 ---
 

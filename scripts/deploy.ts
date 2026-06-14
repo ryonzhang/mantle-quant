@@ -14,6 +14,9 @@
 import { ethers, network } from "hardhat";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 async function main() {
   const [deployer] = await ethers.getSigners();
